@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  robo-bridge:
+    build: .
+    container_name: robo-bridge-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ECOVACS_EMAIL=${ECOVACS_EMAIL}
+      - ECOVACS_PASSWORD=${ECOVACS_PASSWORD}
+      - ECOVACS_COUNTRY=${ECOVACS_COUNTRY:-US}
+      - ECOVACS_CONTINENT=${ECOVACS_CONTINENT:-NA}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - robo-bridge-network
+
+networks:
+  robo-bridge-network:
+    driver: bridge
