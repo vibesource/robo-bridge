@@ -43,7 +43,10 @@ class DeebotManager:
             logger.info(f"Password hash: {password_hash[:8]}...")
             
             session = aiohttp.ClientSession()
-            config = create_rest_config(session, device_id="", alpha_2_country=self.country)
+            # Use a dummy device_id for authentication - this will be replaced during actual device discovery
+            import uuid
+            dummy_device_id = str(uuid.uuid4())[:8]
+            config = create_rest_config(session, device_id=dummy_device_id, alpha_2_country=self.country)
             logger.info(f"Created REST config: {config}")
             
             logger.info(f"Creating authenticator for email: {self.email[:3]}***@{self.email.split('@')[1]}")
@@ -68,17 +71,28 @@ class DeebotManager:
             logger.info("Attempting to authenticate and discover devices...")
             logger.info("Calling api_client.get_devices()...")
             devices = await self.api_client.get_devices()
-            logger.info(f"API returned devices list: {devices}")
-            logger.info(f"Number of devices returned: {len(devices)}")
+            logger.info(f"API returned devices object: {devices}")
+            logger.info(f"Devices object type: {type(devices)}")
             
-            if len(devices) == 0:
+            # Handle different device object types - convert to list if needed
+            if hasattr(devices, 'devices'):
+                device_list = devices.devices
+            elif hasattr(devices, '__iter__') and not isinstance(devices, str):
+                device_list = list(devices)
+            else:
+                device_list = [devices] if devices else []
+            
+            logger.info(f"Device list: {device_list}")
+            logger.info(f"Number of devices found: {len(device_list)}")
+            
+            if len(device_list) == 0:
                 logger.warning("No devices found! This could indicate:")
                 logger.warning("- Devices not properly registered in the Ecovacs app")
                 logger.warning("- Account mismatch between app and API credentials")
                 logger.warning("- Regional server differences")
                 logger.warning("- Library compatibility issues")
             
-            for i, device in enumerate(devices):
+            for i, device in enumerate(device_list):
                 logger.info(f"Processing device {i+1}: {device}")
                 logger.info(f"Device type: {type(device)}")
                 logger.info(f"Device attributes: {dir(device)}")

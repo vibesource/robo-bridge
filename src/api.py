@@ -102,10 +102,19 @@ async def health_check():
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        # Check for specific authentication errors
+        error_msg = str(e)
+        if "InvalidAuthenticationError" in str(type(e).__name__) or "authentication" in error_msg.lower():
+            status_msg = "Authentication failed - check credentials and region settings"
+        elif "ApiError" in str(type(e).__name__) and "Error on getting devices" in error_msg:
+            status_msg = "Authentication succeeded but device discovery failed"
+        else:
+            status_msg = error_msg
+        
         return HealthResponse(
             status="unhealthy",
             devices_connected=0,
-            message=str(e)
+            message=status_msg
         )
 
 @app.get("/devices", response_model=List[DeviceInfo])
@@ -275,6 +284,55 @@ async def debug_authentication():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.post("/test-auth")
+async def test_authentication():
+    """Test authentication only without device discovery"""
+    global deebot_manager
+    
+    if not deebot_manager:
+        return {"error": "Deebot manager not available"}
+    
+    try:
+        # Reset any existing connections
+        deebot_manager.api_client = None
+        deebot_manager.authenticator = None
+        
+        # Re-initialize but catch authentication separately  
+        import aiohttp
+        from deebot_client.authentication import Authenticator, create_rest_config
+        from deebot_client.util import md5
+        import uuid
+        
+        password_hash = md5(deebot_manager.password)
+        session = aiohttp.ClientSession()
+        dummy_device_id = str(uuid.uuid4())[:8]
+        config = create_rest_config(session, device_id=dummy_device_id, alpha_2_country=deebot_manager.country)
+        authenticator = Authenticator(config, deebot_manager.email, password_hash)
+        
+        # Test authentication only
+        credentials = await authenticator._auth_client.login()
+        await session.close()
+        
+        return {
+            "success": True,
+            "message": "Authentication successful!",
+            "country": deebot_manager.country,
+            "continent": deebot_manager.continent,
+            "user_id": credentials.user_id if hasattr(credentials, 'user_id') else "unknown",
+            "expires_at": credentials.expires_at if hasattr(credentials, 'expires_at') else "unknown"
+        }
+    except Exception as e:
+        try:
+            await session.close()
+        except:
+            pass
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": str(type(e).__name__),
+            "message": "Authentication failed - check credentials and region"
+        }
 
 @app.get("/")
 async def root():
