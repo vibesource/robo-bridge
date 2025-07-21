@@ -4,11 +4,13 @@ A Docker-based REST API service for controlling Ecovacs Deebot vacuum cleaners (
 
 ## Features
 
-- **REST API** for vacuum control and status monitoring
-- **Docker containerized** for easy deployment
-- **Multi-device support** for multiple vacuum cleaners
-- **Real-time status updates** including battery level and cleaning state
-- **Comprehensive commands**: start, stop, pause, dock, locate
+- **✅ Complete REST API** for vacuum control and status monitoring
+- **✅ Docker containerized** with production-ready deployment
+- **✅ Multi-device support** - handles multiple vacuum cleaners simultaneously  
+- **✅ Real-time status updates** with live battery monitoring and device events
+- **✅ Full command support**: start, stop, pause, dock, locate operations
+- **✅ Event-driven architecture** with async battery level updates
+- **✅ Interactive API documentation** at `/docs` endpoint
 
 ## Supported Vacuum Models
 
@@ -131,32 +133,53 @@ curl http://localhost:8000/devices/{device_id}/status
 
 ## Current Status
 
-### ✅ Working Components
-- Docker containerization and deployment
-- FastAPI REST API with full endpoint coverage
-- Ecovacs cloud authentication (GB/EU region)
-- Interactive API documentation at `/docs`
-- Configuration testing endpoints
-- Complete project structure and documentation
+### ✅ Fully Operational
+- **Device Discovery**: Successfully discovers and connects to both T8 Pure and U2 vacuum cleaners
+- **Real-time Status**: Live battery level monitoring and device online status
+- **All Commands Working**: locate, dock, start/stop/pause cleaning operations fully functional
+- **Event System**: Proper async battery event handling with real-time status updates
+- **Docker Deployment**: Complete containerized solution ready for production
+- **FastAPI REST API**: Full endpoint coverage with interactive documentation
+- **Multi-device Support**: Handles multiple vacuum cleaners simultaneously
+- **Ecovacs Integration**: Robust authentication and API communication (GB/EU region)
 
-### ⚠️ Known Issues
-- **Device Discovery**: `deebot-client` library successfully authenticates but returns 0 devices for some UK accounts
-- **Library Compatibility**: May require alternative library (`sucks`, `ozmo`) for certain account types
-- **Regional Variations**: Some accounts may need different API approaches
+## Production Deployment
+
+The API is production-ready and fully tested with both T8 Pure and U2 models:
+
+```bash
+# Start production container
+docker-compose up -d
+
+# Verify both devices are connected  
+curl http://localhost:8000/health
+# Expected: {"status": "healthy", "devices_connected": 2, "message": "Connected to 2 devices"}
+
+# Test device control
+curl -X POST http://localhost:8000/devices/{device_id}/locate
+# Expected: {"success": true, "message": "Locate command sent successfully"}
+```
 
 ### 🔧 Troubleshooting
 
-#### Device Discovery Issues
-1. **Verify App Setup**: Ensure both T8 Pure and U2 are visible and online in Ecovacs Home app
-2. **Account Verification**: Confirm the email in `.env` exactly matches your app account
-3. **Regional Settings**: Verify app region matches `ECOVACS_COUNTRY=GB` and `ECOVACS_CONTINENT=EU`
-4. **Device Registration**: Try removing/re-adding one device in the Ecovacs app
+#### Regional Configuration
+For optimal compatibility, ensure your `.env` matches your Ecovacs app region:
 
-#### Common Issues
+```env
+# United Kingdom/Europe
+ECOVACS_COUNTRY=GB
+ECOVACS_CONTINENT=EU
 
-1. **Authentication Failed**: Verify your Ecovacs credentials in `.env`
-2. **No Devices Found**: Ensure vacuums are connected to Ecovacs app
-3. **Connection Timeout**: Check network connectivity and region settings
+# United States  
+ECOVACS_COUNTRY=US
+ECOVACS_CONTINENT=NA
+```
+
+#### Common Setup Issues
+
+1. **Authentication Failed**: Verify your Ecovacs credentials match your app login exactly
+2. **No Devices Found**: Ensure vacuums are online and visible in Ecovacs Home app  
+3. **Command Execution Errors**: Check that devices are not in cleaning mode or have errors
 
 ### Logs
 
