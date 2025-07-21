@@ -74,8 +74,10 @@ class DeebotManager:
             logger.info(f"API returned devices object: {devices}")
             logger.info(f"Devices object type: {type(devices)}")
             
-            # Handle different device object types - convert to list if needed
-            if hasattr(devices, 'devices'):
+            # Extract actual DeviceInfo objects from the Devices container
+            if hasattr(devices, 'mqtt') and devices.mqtt:
+                device_list = devices.mqtt  # These are the actual DeviceInfo objects
+            elif hasattr(devices, 'devices'):
                 device_list = devices.devices
             elif hasattr(devices, '__iter__') and not isinstance(devices, str):
                 device_list = list(devices)
@@ -97,20 +99,39 @@ class DeebotManager:
                 logger.info(f"Device type: {type(device)}")
                 logger.info(f"Device attributes: {dir(device)}")
                 
-                device_id = getattr(device, 'device_id', f'unknown_{i}')
-                device_name = getattr(device, 'name', f'Deebot {device_id}')
+                # Extract device info from DeviceInfo object structure
+                if hasattr(device, 'api') and isinstance(device.api, dict):
+                    device_id = device.api.get('did', f'unknown_{i}')
+                    device_name = device.api.get('nick', device.api.get('deviceName', f'Deebot {device_id}'))
+                else:
+                    device_id = getattr(device, 'device_id', f'unknown_{i}')
+                    device_name = getattr(device, 'name', f'Deebot {device_id}')
                 
                 logger.info(f"Device ID: {device_id}, Name: {device_name}")
                 
-                self.devices[device_id] = device
+                # Create actual Device object from DeviceInfo for command execution
+                try:
+                    actual_device = Device(device, self.authenticator)
+                    self.devices[device_id] = actual_device
+                    logger.info(f"Created Device object for {device_id} ({device_name})")
+                    
+                    # Subscribe to battery events with device-specific handler
+                    battery_handler = self._create_battery_event_handler(device_id)
+                    actual_device.events.subscribe(BatteryEvent, battery_handler)
+                    logger.info(f"Subscribed to battery events for {device_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to create Device object for {device_id}: {e}")
+                    # Still store the DeviceInfo for basic information
+                    self.devices[device_id] = device
+                
                 self.device_status[device_id] = VacuumStatus(
                     device_id=device_id,
                     name=device_name,
                     online=False
                 )
                 
-                # Subscribe to battery events
-                device.events.subscribe(BatteryEvent, self._on_battery_event)
+                logger.info(f"Device {device_id} ({device_name}) added to device list")
                 
             logger.info(f"Successfully processed {len(self.devices)} devices")
             
@@ -122,16 +143,19 @@ class DeebotManager:
             logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
     
-    def _on_battery_event(self, event: BatteryEvent):
-        # Find device by matching event source
-        for device_id, device in self.devices.items():
-            if device == event.device:
-                if device_id in self.device_status:
-                    status = self.device_status[device_id]
-                    status.battery_level = event.value
-                    status.online = True
-                    status.last_updated = str(asyncio.get_event_loop().time())
-                break
+    def _create_battery_event_handler(self, device_id: str):
+        """Create a battery event handler for a specific device"""
+        async def handler(event: BatteryEvent):
+            if device_id in self.device_status:
+                status = self.device_status[device_id]
+                status.battery_level = event.value
+                status.online = True
+                import time
+                status.last_updated = str(time.time())
+                logger.info(f"Battery event for {device_id}: {event.value}% - device now online")
+            else:
+                logger.warning(f"Received battery event for unknown device {device_id}")
+        return handler
     
     async def get_devices(self) -> List[VacuumStatus]:
         return list(self.device_status.values())
