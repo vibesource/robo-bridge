@@ -112,3 +112,16 @@ AI Assistant → HTTP Request → FastAPI → DeebotManager → deebot-client �
 - Follows FastAPI best practices for API design
 - Docker health checks ensure service reliability
 - Environment-based configuration for different deployment scenarios
+
+### Status Update Architecture
+
+- **Current**: Event-driven status updates via real-time events from Ecovacs cloud
+  - BatteryEvent, StateEvent, ErrorEvent, AvailabilityEvent
+  - No polling - relies on push notifications
+  - Status cached until new events arrive
+
+- **Future Enhancement Consideration**: Add periodic status polling as fallback
+  - Could implement 30-60 second polling with `device.request_status()`
+  - Would help with initial state population and connection reliability
+  - **CAUTION**: Avoid excessive requests to prevent Ecovacs server blocking
+  - Only implement if event-driven approach proves insufficient

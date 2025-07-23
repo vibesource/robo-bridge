@@ -6,7 +6,7 @@ import aiohttp
 from deebot_client.api_client import ApiClient
 from deebot_client.authentication import Authenticator, create_rest_config
 from deebot_client.device import Device
-from deebot_client.events import BatteryEvent
+from deebot_client.events import BatteryEvent, StateEvent, ErrorEvent, AvailabilityEvent
 from deebot_client.commands.json.clean import Clean, CleanAction
 from deebot_client.commands.json.charge import Charge
 from deebot_client.commands.json.play_sound import PlaySound
@@ -115,10 +115,18 @@ class DeebotManager:
                     self.devices[device_id] = actual_device
                     logger.info(f"Created Device object for {device_id} ({device_name})")
                     
-                    # Subscribe to battery events with device-specific handler
+                    # Subscribe to events with device-specific handlers
                     battery_handler = self._create_battery_event_handler(device_id)
+                    state_handler = self._create_state_event_handler(device_id)
+                    error_handler = self._create_error_event_handler(device_id)
+                    availability_handler = self._create_availability_event_handler(device_id)
+                    
                     actual_device.events.subscribe(BatteryEvent, battery_handler)
-                    logger.info(f"Subscribed to battery events for {device_id}")
+                    actual_device.events.subscribe(StateEvent, state_handler)
+                    actual_device.events.subscribe(ErrorEvent, error_handler)
+                    actual_device.events.subscribe(AvailabilityEvent, availability_handler)
+                    
+                    logger.info(f"Subscribed to battery, state, error, and availability events for {device_id}")
                     
                 except Exception as e:
                     logger.error(f"Failed to create Device object for {device_id}: {e}")
@@ -155,6 +163,66 @@ class DeebotManager:
                 logger.info(f"Battery event for {device_id}: {event.value}% - device now online")
             else:
                 logger.warning(f"Received battery event for unknown device {device_id}")
+        return handler
+    
+    def _create_state_event_handler(self, device_id: str):
+        """Create a state event handler for a specific device"""
+        async def handler(event: StateEvent):
+            if device_id in self.device_status:
+                status = self.device_status[device_id]
+                # Convert state enum to human-readable string
+                state_name = event.state.name.lower().replace('_', ' ').title()
+                status.cleaning_state = state_name
+                
+                # Clear error message if not in error state
+                if event.state.name != 'ERROR':
+                    if status.error_message and "Error code" in status.error_message:
+                        status.error_message = None
+                
+                import time
+                status.last_updated = str(time.time())
+                logger.info(f"State event for {device_id}: {state_name}")
+            else:
+                logger.warning(f"Received state event for unknown device {device_id}")
+        return handler
+    
+    def _create_error_event_handler(self, device_id: str):
+        """Create an error event handler for a specific device"""
+        async def handler(event: ErrorEvent):
+            if device_id in self.device_status:
+                status = self.device_status[device_id]
+                if event.description:
+                    status.error_message = event.description
+                else:
+                    status.error_message = f"Error code {event.code}"
+                
+                import time
+                status.last_updated = str(time.time())
+                logger.warning(f"Error event for {device_id}: {status.error_message}")
+            else:
+                logger.warning(f"Received error event for unknown device {device_id}")
+        return handler
+    
+    def _create_availability_event_handler(self, device_id: str):
+        """Create an availability event handler for a specific device"""
+        async def handler(event: AvailabilityEvent):
+            if device_id in self.device_status:
+                status = self.device_status[device_id]
+                status.online = event.available
+                
+                if not event.available:
+                    status.error_message = "Device unavailable"
+                    status.cleaning_state = None
+                else:
+                    # Clear unavailability error when device comes back online
+                    if status.error_message == "Device unavailable":
+                        status.error_message = None
+                
+                import time
+                status.last_updated = str(time.time())
+                logger.info(f"Availability event for {device_id}: {'online' if event.available else 'offline'}")
+            else:
+                logger.warning(f"Received availability event for unknown device {device_id}")
         return handler
     
     async def get_devices(self) -> List[VacuumStatus]:
