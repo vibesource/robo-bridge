@@ -5,7 +5,7 @@ services:
     build: .
     container_name: robo-bridge-api
     ports:
-      - "8000:8000"
+      - "${API_PORT}:8000"
     environment:
       - ECOVACS_EMAIL=${ECOVACS_EMAIL}
       - ECOVACS_PASSWORD=${ECOVACS_PASSWORD}
